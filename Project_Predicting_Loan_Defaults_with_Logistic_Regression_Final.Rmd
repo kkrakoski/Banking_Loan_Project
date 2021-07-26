@@ -1,0 +1,639 @@
+---
+title: "Project: Predicting Loan Defaults with Logistic Regression"
+author: "Kyle Krakoski"
+date: "4/28/2021"
+output:
+  word_document: default
+  html_document: default
+---
+
+```{r setup, echo=FALSE, include=FALSE, message=FALSE}
+#Load libraries
+library(mice)
+library(VIM)
+```
+
+## Section 1: Executive Summary
+
+This report provides an analysis of what characteristics of bank loan applicants would be most indicative of loan defaults, a model to most accurately predict if a loan will be good or bad, and a model to maximize profit from loans. 
+
+Before the calculations to find the most significant predictor characteristics were performed, the analysis first eliminated any characteristics that could be considered illegal, unethical, or impractical to use.  Additionally, to keep the model simple, only the ten most significant predictors were used.  These predictors were then used in the model.  A full summary of predictor choices and calculations used can be found in Sections 3, 4, and 5. 
+
+To determine the results of the model, “threshold” values were tested.  This threshold values started at 0.05, were increased by 0.05, and ended at 0,95. These thresholds determined if a loan was classified as “Good” or “Bad.”  If the model output a value below the threshold value, the loan was considered “Bad”, and if the model outputted a value above the threshold value it was considered “Good.”  Different threshold values were tested to find the most accurate model and most profitable model.  A full summary of how threshold values were used and the calculations can be found in Sections 6 and 7. 
+
+The variables I chose to pre-eliminate, and why, are in Section 3. The results of the predictor analysis showed that 15 variables might be significant.  As stated, I chose 10 for model simplicity.  
+For model accuracy, threshold values from 0.05 to 0.60 provided similar accuracies, with a step decline of accuracy for threshold values greater than 0.60.  Without the model, loan officers were 78.46% accurate in determining “Good” loans.  A graph of all accuracy values can be found in Section 6.  For maximum profit, threshold values between 0.55 and 0.75 provided the greatest profits.  A graph of all profit values can be found in Section 7.  
+
+The ten most significant predictors were amount, term, payment, grade, debtIncRat, delinq2yr, inq6mth, totalAcc, accOpen24, and totalLim.  The five less significant predictors were if income was verified, revolRatio, totalRevLim, bcRatio, and totalIlLim.  
+For model accuracy, the most accurate model was at a threshold value of 0.5.  The accuracy at this threshold was 79.17%, 0.71% greater than if no model was used. Additionally, the profit with this model was 70.83% greater than if no model were used. 
+For maximum profit, the best profit model was at a threshold value of 0.7.   The profit using this model was 117.18% greater than if no model were used. However, the accuracy was only 74.61%, 3.86% lower than if no model were used. 
+
+Decision points:
+•	Choose the model based on accuracy or profit.
+•	Decide if you’d like to have a more complex model by adding predictors that were cut.
+
+One limitation of this model is the number of predictors used.  More predictors might result in a better profit model but complicate it.  Additionally, the most optimal threshold value might not be at a 0.05 interval but testing smaller intervals would take exponentially longer.  
+
+
+## Section 2: Introduction
+
+The goal of this project is to find what characteristics of applicants would be most indicative of loan defaults.  This means this paper will be focusing mostly on loan defaults (and not what makes a good loan or maximizing good loans, for example).  The first step is to clean the data in the loans50k.csv file.  This involves eliminating the variables that would obviously not affect if a loan is defaulted on and variables that would be unethical to use to make a decision.  Next is to change the loan status to either "Good" ("Fully Paid" loans) or "Bad" ("Charged Off" or "Default" loans).  Ongoing loans ("Current", "Late ...", and "In Grace Period" loans) were removed from analysis.  After that I analyzed each possible predictor variable and consolidated categories within them or redefinied them as I saw fit. The last step for data cleaning was to eliminate rows with empty or NA values or impute those values.  If the number of cells in a column with these values was statistically insignificant (I used a threshold of 1% of the total number of rows), I removed rows with those values. If the number of cells was over 1% of the total number of rows I imputed the values.  The specifics of each step will be described in Section 3.
+
+Once the data was cleaned the distributions of the predictor variables were analyzed and graphed.  I analyzed the distributions of the variables for all loans and then for just "Good" loans and just "Bad" loans.  Since we're focused on finding predictors for loan defaults, I'm most concerned about the distributions of "Bad" loans compared to the distributions of "Good" loans and all loans. For categorical variables, tables and bar graphs were used. For numerical variables density plots were used.  I specifically chose to use density plots over histograms to better see the changes in proportions of "Bad" loans compared to all loans or "Good" loans.  A large shift would mean that variable is a better predictor of "Bad" loans.  In order for regression to be more accurate, normal distribution is desired.  To get distributions as close to normal as I could, some variable values were transformed. For right-skewed variable distributions natural logs or roots of the variable values were taken to shift the distributions. For left-skewed distributions powers of the variable values were taken to shift the distributions.  The specific transformations and conclusions will be discussed in Section 4.     
+
+```{r echo=FALSE, include= FALSE}
+#Create dataframe from data
+loans = read.csv("loans50k.csv")
+loans_df <- data.frame(loans)
+```
+
+## Section 3: Preparing and Cleaning the Data
+
+The variables I chose to remove were loanID, employment, employment length (length), home status, state, and total amount paid to the bank (totalPaid).  I eliminated loanID because it's just used as an identifier and obviously does not affect loan default chance.  I eliminated employment because there's far too many different values to make any meaningful analysis on.  I eliminated employment length (length) because there could any number of reasons someone could be unemployed for a length of time (school, layoffs, job transitioning, etc.) and income is far more important.  Additionally, I believe sudden unemployment would be more of an issue once the loan is already granted and not of our concern.  I eliminated the "home" variable because whether someone rents or mortgages a house depends a lot on area they live in, which would be discriminatory to make a decision about.  I do believe someone with an "Owned" home status would be more likely to payoff their loan(not having a monthly rent or mortgage to pay), but since we're just concerned about "Bad" loans I did not feel it was necessary to include. I removed the "state" variable for similar reasons- it would be unethical (and also impractical) to make a decision based on the state an applicant would live in.  Finally, the variable of total amount paid to the bank (totalPaid) was eliminated due to the variable not being determined until after a loan was already granted.
+
+The  process for the next step, changing loan statuses to "Good" or "Bad" and removing the ones not fitting these categories, was described in the intro.  
+
+Next, for the "grade" variable, I changed the letter grades to numbers in order to graph a density plot of the data.
+
+I consolidated some of the categories with low counts (under 200) in the "Reason" variable into the "other" category.  I also consolidated "Source Verified" and "Verified" categories together in the "verified" variable.
+
+The final step was to eliminate or impute empty and NA cells.  Using my rules explained in the Introduction, the "revolRatio" NA cells had their rows eliminated while the "bcOpen" and "bcRatio" variables had their cells imputed.
+
+After all the data cleaning, I was left with 27 variables out of 32, and 34,640 loans out of 50,000. 
+
+```{r pressure, echo=FALSE, include = FALSE}
+#Change loan "status" to "Good" or "Bad", remove statuses that don't fit either category
+loans_df$status[loans_df$status == "Charged Off"]<- "Bad"
+loans_df$status[loans_df$status == "Default"]<- "Bad"
+loans_df$status[loans_df$status == "Fully Paid"]<- "Good"
+loans_df$status[loans_df$status == ""]<- NA
+loans_df$status[loans_df$status == "Current"]<- NA
+loans_df$status[loans_df$status == "Late (16-30 days)"]<- NA
+loans_df$status[loans_df$status == "Late (31-120 days)"]<- NA
+loans_df$status[loans_df$status == "In Grace Period"]<- NA
+loans_df <- loans_df[!is.na(loans_df$status), ]
+loans_df <- loans_df[!is.na(loans_df$revolRatio), ]
+loans_df <- subset (loans_df, select = -c(loanID, employment, length, home, state))
+
+#Change letter grades to numeric values- see distribution of grades better
+loans_df$grade[loans_df$grade == "A"]<- "1"
+loans_df$grade[loans_df$grade == "B"]<- "2"
+loans_df$grade[loans_df$grade == "C"]<- "3"
+loans_df$grade[loans_df$grade == "D"]<- "4"
+loans_df$grade[loans_df$grade == "E"]<- "5"
+loans_df$grade[loans_df$grade == "F"]<- "6"
+loans_df$grade[loans_df$grade == "G"]<- "7"
+
+#Remove Grade row with empty cell
+loans_df<-loans_df[!(loans_df$grade==""),]
+loans_df$grade <- as.numeric(loans_df$grade)
+
+#Consolidate "Reason" variables with low counts into "Other"
+loans_df$reason[loans_df$reason == "wedding"]<- "other"
+loans_df$reason[loans_df$reason == "renewable_energy"]<- "other"
+loans_df$reason[loans_df$reason == "house"]<- "other"
+
+#Consolidate "Source Verified" and "Verified" values into one
+loans_df$verified[loans_df$verified == "Source Verified"]<- "Verified"
+
+
+#Imputation of bcOPen variable
+na_bc_Open_list = c(which(is.na(loans_df$bcOpen)))
+loans_df <- mice(loans_df, m=5)
+loans_df$imp$bcOpen
+loans_df <-complete(loans_df) #Used the default, which was the first imputation calculated
+
+#Imputation of bcRatio variable
+na_bc_Ratio_list = c(which(is.na(loans_df$bcRatio)))
+loans_df <- mice(loans_df, m=5)
+loans_df$imp$bcRatio
+loans_df <-complete(loans_df) #Used the default, which was the first imputation calculated
+```
+
+## Section 4: Exploring and Transforming the Data
+
+Most of the numerical data I had required some type of transformation to reach a normal (or nearer to normal) distribution.  These transformations were either natural logs or roots to fix right-skewness, and powers to fix left-skewness.  Some variables required both, as taking the log of a variable would push it too far into left-skewness.  The variables requiring one of these transformations were: amount, rate, payment, grade, income, delinq2yr, openACC, pubRec, totalAcc, TotalBal, TotalRevLim, AccOpen24, avgBal, bcOpen, bcRatio, totallim, totalRevBal, totalBcLim, and totalIlLim.  
+An example of one of these transformed graphs that turned out well is the "Total Unused Credit on Credit Cards (bcOpen)" graphs:  
+
+```{r echo= FALSE}
+#Total Unused Credit on Credit Cards
+new_bcOpen = (loans_df$bcOpen)^(1/4)
+new_bcOpen_bad = (loans_df$bcOpen[loans_df$status == "Bad"])^(1/4)
+new_bcOpen_good = (loans_df$bcOpen[loans_df$status == "Good"])^(1/4)
+plot(density(new_bcOpen), col="black", main = "Unused Credit on Credit Cards Density Plot", xlab = "Unused Credit")
+lines(density(new_bcOpen_bad), col="red")
+lines(density(new_bcOpen_good), col="green")
+legend("right", c("All Loans","Bad Loans", "Good Loans"), pch=15, 
+       col=c("black","red", "green"), 
+       bty="n")
+```
+
+However, some of these variables were difficult to transform into a normal distribution, such as the "ratio of total credit card balance to total credit card limits (bcRatio)" variable:
+
+```{r echo= FALSE}
+#ratio of total credit card balance to total credit card limits
+new_bcRatio = (loans_df$bcRatio)^(2/3)
+new_bcRatio_bad = (loans_df$bcRatio[loans_df$status == "Bad"])^(2/3)
+new_bcRatio_good = (loans_df$bcRatio[loans_df$status == "Good"])^(2/3)
+plot(density(new_bcRatio), col="black", main = "Ratio of Credit Card Balance to Credit Card Limits", xlab = "Credit Card Balance-Credit Card Limits Ratio")
+lines(density(new_bcRatio_bad), col="red")
+lines(density(new_bcRatio_good), col="green")
+legend("right", c("All Loans","Bad Loans", "Good Loans"), pch=15, 
+       col=c("black","red", "green"), 
+       bty="n")
+```
+
+The only two numerical variables that didn't require transformations were the debtIncRat and revolratio variables. Once all the numerical variables were put into a normal distribution (or as close as I could get) I inspected how the "Bad" loan distrubutions differed from the "Good" loan and total loan distributions.  A major shift in the "Bad" loan distribution indicated that it was likely that variable was a strong predictor of a loan default.  A "Bad" loan distribution with an insignificant shift from the population distribution was an indicator that the variable probably wasn't a good predictor of a loan default and just mirrored population size.  Both types of "Bad" loan distributions are graphed below:
+
+```{r echo= FALSE}
+#Rate
+new_rate = (loans_df$rate)^(1/3)
+new_rate_bad = (loans_df$rate[loans_df$status == "Bad"])^(1/3)
+new_rate_good = (loans_df$rate[loans_df$status == "Good"])^(1/3)
+plot(density(new_rate), col="black", main = "Interest Rate Density Plot (Strong Indicator)", xlab = "Interest Rates")
+lines(density(new_rate_bad), col="red")
+lines(density(new_rate_good), col="green")
+legend("right", c("All Loans","Bad Loans", "Good Loans"), pch=15, 
+       col=c("black","red", "green"), 
+       bty="n")
+```
+
+```{r echo= FALSE}
+#totalAccounts
+new_totalAcc = log(loans_df$totalAcc)
+new_totalAcc_bad = log(loans_df$totalAcc[loans_df$status == "Bad"])
+new_totalAcc_good = log(loans_df$totalAcc[loans_df$status == "Good"])
+plot(density(new_totalAcc), col="black", main = "Number of Credit Lines in File (Weak Indicator)", xlab = "Credit Lines")
+lines(density(new_totalAcc_bad), col="red")
+lines(density(new_totalAcc_good), col="green")
+legend("right", c("All Loans","Bad Loans", "Good Loans"), pch=15, 
+       col=c("black","red", "green"), 
+       bty="n")
+```
+
+For categorical variables I used a bar graph or just a table.  In fact, the "reason" variable was the only variable I used a graph for:
+```{r echo= FALSE, warning=FALSE, message=FALSE}
+#Reason
+library(gridExtra)
+library(gtable)
+allreasons <-table(loans_df$reason)
+badreasons<- table(loans_df$reason[loans_df$status == "Bad"])
+goodreasons <- table(loans_df$reason[loans_df$status == "Good"])
+par(mfrow = c(1,3))
+
+barplot(allreasons,main="Reasons for Any Loan", col="black") 
+barplot(badreasons,main="Reasons for Bad Loans", col="black")
+barplot(goodreasons,main="Reasons for Good Loans", col="black")
+
+```
+
+The distribution for the "Bad" loan bar graph didn't seem to change much from the population bar graph, so I'd consider it a weak predictor.
+
+For the final variables, "term" and "verified", I simply got the counts for population total, "Bad" loans, and "Good" loans of each category within each variable.  Then, I found the percentages of the categories in the total population and compared them to the percentages in the "Bad" loans.  For example, here is the table for the "term" variable:
+```{r echo= FALSE}
+#Term
+print("Total Loans:")
+table(loans_df$term)
+print("Bad Loans")
+table(loans_df$term[loans_df$status == "Bad"])
+print("Good Loans:")
+table(loans_df$term[loans_df$status == "Good"])
+```
+60-month  loans made up about 26% of all loans.  However, 60-month loans made up 42% of all bad loans and 21% of all good loans.  Since the percentage of 60-month loans that made up all bad loans was higher than the percentage of 60-month loans in the total population, I'd say loan term is a strong predictor of a loan default.
+```{r echo=FALSE, include = FALSE}
+#Amount 
+new_amount = log(loans_df$amount)^5
+new_amount_bad = log(loans_df$amount[loans_df$status == "Bad"])^5
+new_amount_good = log(loans_df$amount[loans_df$status == "Good"])^5
+plot(density(new_amount), col="black", main = "Loan Amount Density Plot", xlab = "Loan Amounts")
+lines(density(new_amount_bad), col="red")
+lines(density(new_amount_good), col="green")
+legend("right", c("All Loans","Bad Loans", "Good Loans"), pch=15, 
+       col=c("black","red", "green"), 
+       bty="n")
+```
+
+
+
+
+
+```{r echo=FALSE, include = FALSE}
+#Monthly Payment 
+new_payment = log(loans_df$payment)^3
+new_payment_bad = log(loans_df$payment[loans_df$status == "Bad"])^3
+new_payment_good = log(loans_df$payment[loans_df$status == "Good"])^3
+plot(density(new_payment), col="black", main = "Monthly Payment Amount Density Plot", xlab = "Monthly Payment Amount")
+lines(density(new_payment_bad), col="red")
+lines(density(new_payment_good), col="green")
+legend("right", c("All Loans","Bad Loans", "Good Loans"), pch=15, 
+       col=c("black","red", "green"), 
+       bty="n")
+```
+
+```{r echo=FALSE, include = FALSE}
+#Grade 
+new_grade = (loans_df$grade)^(1/4)
+new_grade_bad = (loans_df$grade[loans_df$status == "Bad"])^(1/4)
+new_grade_good = (loans_df$grade[loans_df$status == "Good"])^(1/4)
+plot(density(new_grade), col="black", main = "Grade Density Plot", xlab = "Grade")
+lines(density(new_grade_bad), col="red")
+lines(density(new_grade_good), col="green")
+legend("right", c("All Loans","Bad Loans", "Good Loans"), pch=15, 
+       col=c("black","red", "green"), 
+       bty="n")
+
+```
+
+```{r echo=FALSE, include = FALSE}
+#Income
+new_income = log(loans_df$income)
+new_income_bad = log(loans_df$income[loans_df$status == "Bad"])
+new_income_good = log(loans_df$income[loans_df$status == "Good"])
+plot(density(new_income), col="black", main = "Annual Income Density Plot", xlab = "Annual Income")
+lines(density(new_income_bad), col="red")
+lines(density(new_income_good), col="green")
+legend("right", c("All Loans","Bad Loans", "Good Loans"), pch=15, 
+       col=c("black","red", "green"), 
+       bty="n")
+```
+
+```{r echo=FALSE, include = FALSE}
+#Verification
+table(loans_df$verified)
+table(loans_df$verified[loans_df$status == "Bad"])
+table(loans_df$verified[loans_df$status == "Good"])
+
+```
+
+
+
+```{r echo=FALSE, include = FALSE}
+#DebtIncRat
+plot(density(loans_df$debtIncRat), col="black", main = "Ratio Debt Payment to Monthly Income Density Plot", xlab = "Debt Payment-Monthly Income Ratio")
+lines(density(loans_df$debtIncRat[loans_df$status == "Bad"]), col="red")
+lines(density(loans_df$debtIncRat[loans_df$status == "Good"]), col="green")
+legend("right", c("All Loans","Bad Loans", "Good Loans"), pch=15, 
+       col=c("black","red", "green"), 
+       bty="n")
+```
+```{r echo=FALSE, include = FALSE}
+#delinq2yr
+new_delinq2yr = (loans_df$delinq2yr)^(1/3)
+new_delinq2yr_bad = (loans_df$delinq2yr[loans_df$status == "Bad"])^(1/3)
+new_delinq2yr_good = (loans_df$delinq2yr[loans_df$status == "Good"])^(1/3)
+plot(density(new_delinq2yr), col="black", main = "Number of 30+ Day Late Payments in Last Two Years Density Plot", xlab = "Number of Late Payments")
+lines(density(new_delinq2yr_bad), col="red")
+lines(density(new_delinq2yr_good), col="green")
+legend("right", c("All Loans","Bad Loans", "Good Loans"), pch=15, 
+       col=c("black","red", "green"), 
+       bty="n")
+
+```
+```{r echo=FALSE, include = FALSE}
+#inq6mth
+new_inq6mth = (loans_df$inq6mth)^(1/4)
+new_inq6mth_bad = (loans_df$inq6mth[loans_df$status == "Bad"])^(1/4)
+new_inq6mth_good = (loans_df$inq6mth[loans_df$status == "Good"])^(1/4)
+plot(density(new_inq6mth), col="black", main = "Number of Credit Checks in the Past Six Months Density Plot", xlab = "Credit Checks")
+lines(density(new_inq6mth_bad), col="red")
+lines(density(new_inq6mth_good), col="green")
+legend("right", c("All Loans","Bad Loans", "Good Loans"), pch=15, 
+       col=c("black","red", "green"), 
+       bty="n")
+```
+
+```{r echo=FALSE, include = FALSE}
+#openAcc
+new_openACC = log(loans_df$openAcc)
+new_openACC_bad = log(loans_df$openAcc[loans_df$status == "Bad"])
+new_openACC_good = log(loans_df$openAcc[loans_df$status == "Good"])
+plot(density(new_openACC), col="black", main = "Number of Open Credit Lines Density Plot", xlab = "Credit Lines")
+lines(density(new_openACC_bad), col="red")
+lines(density(new_openACC_good), col="green")
+legend("right", c("All Loans","Bad Loans", "Good Loans"), pch=15, 
+       col=c("black","red", "green"), 
+       bty="n")
+```
+
+```{r echo=FALSE, include = FALSE}
+#pubRec
+new_pubRec = (loans_df$pubRec)^(1/4)
+new_pubRec_bad = (loans_df$pubRec[loans_df$status == "Bad"])^(1/4)
+new_pubRec_good = (loans_df$pubRec[loans_df$status == "Good"])^(1/4)
+plot(density(new_pubRec), col="black", main = "Number of Derogatory Public Records Density Plot", xlab = "Records")
+lines(density(new_pubRec_bad), col="red")
+lines(density(new_pubRec_good), col="green")
+legend("right", c("All Loans","Bad Loans", "Good Loans"), pch=15, 
+       col=c("black","red", "green"), 
+       bty="n")
+```
+
+```{r echo=FALSE, include = FALSE}
+#revolratio
+plot(density(loans_df$revolRatio), col="black", main = "Proportion of Revolving Credit in Use Density Plot", xlab = "Revolving Credit in Use")
+lines(density(loans_df$revolRatio[loans_df$status == "Bad"]), col="red")
+lines(density(loans_df$revolRatio[loans_df$status == "Good"]), col="green")
+legend("right", c("All Loans","Bad Loans", "Good Loans"), pch=15, 
+       col=c("black","red", "green"), 
+       bty="n")
+```
+
+
+```{r echo=FALSE, include = TRUE}
+#Total Balance all Credit Accounts
+new_totalBal = (loans_df$totalBal)^(1/4)
+new_totalBal_bad = (loans_df$totalBal[loans_df$status == "Bad"])^(1/4)
+new_totalBal_good = (loans_df$totalBal[loans_df$status == "Good"])^(1/4)
+plot(density(new_totalBal), col="black", main = "Total Current Balance of All Credit Accounts Density Plot", xlab = "Current Balance")
+lines(density(new_totalBal_bad), col="red")
+lines(density(new_totalBal_good), col="green")
+legend("right", c("All Loans","Bad Loans", "Good Loans"), pch=15, 
+       col=c("black","red", "green"), 
+       bty="n")
+```
+
+```{r echo=FALSE, include = FALSE}
+#Sum of Credit Limits from all Credit Lines
+new_totalRevLim = log(loans_df$totalRevLim)
+new_totalRevLim_bad = log(loans_df$totalRevLim[loans_df$status == "Bad"])
+new_totalRevLim_good = log(loans_df$totalRevLim[loans_df$status == "Good"])
+plot(density(new_totalRevLim), col="black", main = "Sum of Credit Limits from all Credit Lines Density Plot", xlab = "Credit Limits")
+lines(density(new_totalRevLim_bad), col="red")
+lines(density(new_totalRevLim_good), col="green")
+legend("right", c("All Loans","Bad Loans", "Good Loans"), pch=15, 
+       col=c("black","red", "green"), 
+       bty="n")
+```
+
+```{r echo=FALSE, include = FALSE}
+#Accounts opened in the last 24 months
+new_accOpen24 = (loans_df$accOpen24)^(1/3)
+new_accOpen24_bad = (loans_df$accOpen24[loans_df$status == "Bad"])^(1/3)
+new_accOpen24_good = (loans_df$accOpen24[loans_df$status == "Good"])^(1/3)
+plot(density(new_accOpen24), col="black", main = "Accounts Opened in the Last 24 Months Density Plot", xlab = "Accounts Opened")
+lines(density(new_accOpen24_bad), col="red")
+lines(density(new_accOpen24_good), col="green")
+legend("right", c("All Loans","Bad Loans", "Good Loans"), pch=15, 
+       col=c("black","red", "green"), 
+       bty="n")
+```
+
+```{r echo=FALSE, include = TRUE}
+#Avg Balance per Account
+new_avgBal = (loans_df$avgBal)^(1/4)
+new_avgBal_bad = (loans_df$avgBal[loans_df$status == "Bad"])^(1/4)
+new_avgBal_good = (loans_df$avgBal[loans_df$status == "Good"])^(1/4)
+plot(density(new_avgBal), col="black", main = "Average Balance per Account Density Plot", xlab = "Avg. Balance")
+lines(density(new_avgBal_bad), col="red")
+lines(density(new_avgBal_good), col="green")
+legend("right", c("All Loans","Bad Loans", "Good Loans"), pch=15, 
+       col=c("black","red", "green"), 
+       bty="n")
+```
+
+
+```{r echo=FALSE, include = FALSE}
+#Total Credit Limits
+new_totalLim = log(loans_df$totalLim)^2
+new_totalLim_bad = log(loans_df$totalLim[loans_df$status == "Bad"])^2
+new_totalLim_good = log(loans_df$totalLim[loans_df$status == "Good"])^2
+plot(density(new_totalLim), col="black", main = "Total Credit Limits Density Plot", xlab = "Credit Limits")
+lines(density(new_totalLim_bad), col="red")
+lines(density(new_totalLim_good), col="green")
+legend("right", c("All Loans","Bad Loans", "Good Loans"), pch=15, 
+       col=c("black","red", "green"), 
+       bty="n")
+```
+
+```{r echo=FALSE, include = TRUE}
+#Total Credit Balance except mortgages
+new_totalRevBal = (loans_df$totalRevBal)^(1/4)
+new_totalRevBal_bad = (loans_df$totalRevBal[loans_df$status == "Bad"])^(1/4)
+new_totalRevBal_good = (loans_df$totalRevBal[loans_df$status == "Good"])^(1/4)
+plot(density(new_totalRevBal), col="black", main = "Total Credit Balance Except Mortgages Density Plot", xlab = "Credit Balance")
+lines(density(new_totalRevBal_bad), col="red")
+lines(density(new_totalRevBal_good), col="green")
+legend("right", c("All Loans","Bad Loans", "Good Loans"), pch=15, 
+       col=c("black","red", "green"), 
+       bty="n")
+```
+
+```{r echo=FALSE, include = TRUE}
+#Total Credit Limits of Credit Cards
+new_totalBcLim = (loans_df$totalBcLim)^(1/4)
+new_totalBcLim_bad = (loans_df$totalBcLim[loans_df$status == "Bad"])^(1/4)
+new_totalBcLim_good = (loans_df$totalBcLim[loans_df$status == "Good"])^(1/4)
+plot(density(new_totalBcLim), col="black", main = "Total Credit Limits of Credit Cards Density Plot", xlab = "Credit Limits")
+lines(density(new_totalBcLim_bad), col="red")
+lines(density(new_totalBcLim_good), col="green")
+legend("right", c("All Loans","Bad Loans", "Good Loans"), pch=15, 
+       col=c("black","red", "green"), 
+       bty="n")
+```
+
+```{r echo=FALSE, include = TRUE}
+#Total of Credit Limits for Installment Accounts
+new_totalIlLim = (loans_df$totalIlLim)^(1/4)
+
+new_totalIlLim_bad = (loans_df$totalIlLim[loans_df$status == "Bad"])^(1/4)
+new_totalIlLim_good = (loans_df$totalIlLim[loans_df$status == "Good"])^(1/4)
+plot(density(new_totalIlLim), col="black", main = "Total Credit Limits for Installment Accounts Density Plot", xlab = "Credit Limits for Installment Accounts")
+lines(density(new_totalIlLim_bad), col="red")
+lines(density(new_totalIlLim_good), col="green")
+legend("right", c("All Loans","Bad Loans", "Good Loans"), pch=15, 
+       col=c("black","red", "green"), 
+       bty="n")
+```
+
+
+## Section 5: The Logistic Model
+
+The first step for creating the logistic model was to replace the columns in the loan dataframe with the transformed values.  
+```{r echo=FALSE, include = FALSE}
+#Create a new loans dataframe with the transformed values 
+trans_loan_df <- loans_df
+trans_loan_df$amount <- new_amount
+trans_loan_df$rate <- new_rate
+trans_loan_df$payment <- new_payment
+trans_loan_df$grade <- new_grade
+trans_loan_df$income <- new_income
+trans_loan_df$delinq2yr <- new_delinq2yr
+trans_loan_df$inq6mth <- new_inq6mth
+trans_loan_df$openAcc <- new_openACC
+trans_loan_df$pubRec <- new_pubRec
+trans_loan_df$totalAcc <- new_totalAcc
+trans_loan_df$totalBal <- new_totalBal
+trans_loan_df$totalRevLim <- new_totalRevLim
+trans_loan_df$accOpen24 <- new_accOpen24
+trans_loan_df$avgBal <- new_avgBal
+trans_loan_df$bcOpen <- new_bcOpen
+trans_loan_df$bcRatio <- new_bcRatio
+trans_loan_df$totalLim <- new_totalLim
+trans_loan_df$totalRevBal <- new_totalRevBal
+trans_loan_df$totalBcLim <- new_totalBcLim
+trans_loan_df$totalIlLim <- new_totalIlLim
+trans_loan_df$status[trans_loan_df$status == "Bad"]<- 0
+trans_loan_df$status[trans_loan_df$status == "Good"]<- 1
+trans_loan_df$term <- as.factor(trans_loan_df$term)
+trans_loan_df$verified <- as.factor(trans_loan_df$verified)
+trans_loan_df$status <- as.numeric(trans_loan_df$status)
+trans_loan_df$reason <- as.factor(trans_loan_df$reason)
+```
+Then I set a random seed and created a training and testing dataset, and ran the logistic regression analysis.
+```{r echo=FALSE, include = FALSE}
+#Create training and testing dataframes, remove totalPaid and reason column from training dataset
+set.seed(105)
+sample <- sample.int(n = nrow(trans_loan_df), size = floor(.80*nrow(trans_loan_df)), replace = FALSE)
+train_trans_loans_df <- trans_loan_df[sample, ]
+test_trans_loans_df <- trans_loan_df[-sample, ]
+train_trans_loans_df <- subset(train_trans_loans_df, select = -c(totalPaid, reason))
+```
+
+After running the logistic regression model for the first time, reason was only partially a significant variable- only a few categories of "reason" were significant, less than half.  To me, this isn't a very strong predictor. This also aligns with my findings in the exploratory step, where the distribution of "Bad" loans and "Good" loans didn't change much when analyzed under the "reason" variable. Therefore, I decided that "reason" wasn't a very useful predictor variable so I removed it from the training dataframe and reran the logistic regression model below.
+
+```{r echo=FALSE, include = TRUE}
+#Create logistic regression model.  
+first_loan_glm <- glm(status~., data = train_trans_loans_df, family = "binomial")
+summary(first_loan_glm)
+```
+Even though sixteen variables were deemed to be significant, I decided to only keep the ten best, plus interaction terms.  This is because I didn't want to overcomplicate the model, especially since I'd be presenting it to management. Ten felt reasonable. Below is the regsubests graph with the 10 predictors it chose, with the ten best variables being amount, term, payment, grade, debtIncRat, delinq2yr, inq6mth, totalAcc, accOpen24, and totalLim.
+```{r echo=FALSE, warning=FALSE, message=FALSE, include = TRUE}
+#Use regsubsets to find the best 10 variables
+library(leaps)
+loan_reg <- regsubsets(status~.,nvmax=10,data=train_trans_loans_df)
+plot(loan_reg, scale="adjr2") 
+```
+
+Next I used forward selection with the model variables to see if any interaction terms made it better.  After testing the accuracy of different models with different interaction terms added and removed, I found the most accurate model was when only the term:totalLim interaction term was added. This model ended up having the predictors amount, term, payment, grade, debtIncRat, delinq2yr, inq6mth, totalAcc, accOpen24, totalLim, and term:totalLim.  The AIC for this model was 26191.11.  It was not the lowest AIC, but again, it did correlate with the highest accuracy of predicted "Good"/"Bad" loans which is why I chose it.  Due to the length of the output, I have decided to hide it and just include the code block.
+```{r echo=TRUE, include = FALSE}
+#Use forward stepping to find possible interaction variables and AIC values
+initial_model <- glm(status~ amount + term+ payment+ grade+ debtIncRat+ delinq2yr+ inq6mth+ totalAcc+ accOpen24+ totalLim, data = train_trans_loans_df, family = "binomial")
+step(initial_model, scope = . ~ .^2, direction = 'forward')
+```
+
+
+Below is the final model, and the diagnostic plots for that model. The typical residual vs. fitted values plot and QQ plots isn't useful for binomial logistic regression models (which ours is), so instead I'll be using a binned residuals plot. Binned residual plots are achieved by “dividing the data into categories (bins) based on their fitted values, and then plotting the average residual versus the average fitted value for each bin.” (Gelman, Hill 2007: 97). If the model were true, one would expect about 95% of the residuals to fall inside the error bounds (here, the green lines).  As we can see more than 95% of the residuals fall inside the error bounds, so our model is valid.
+```{r echo=FALSE, warning=FALSE, message=FALSE, include = TRUE}
+#Create the final model and binned residual plot.
+
+final_model <- glm(status~ amount + term + payment + grade + debtIncRat + delinq2yr + 
+    inq6mth + totalAcc + accOpen24 + totalLim + term:totalLim, family = "binomial", data = train_trans_loans_df)
+summary(final_model)
+library(ggplot2)
+library(arm)
+binnedplot(fitted(final_model), 
+           residuals(final_model, type = "response"), 
+           nclass = NULL, 
+           xlab = "Expected Values", 
+           ylab = "Average residual", 
+           main = "Binned residual plot", 
+           cex.pts = 0.8, 
+           col.pts = 1, 
+           col.int = "green")
+```
+
+
+## Section 6: Oprimizing the Threshold for Accuracy
+
+Below are the prediction accuracies for the different threshold values, starting at 0.05 and incrementing by 0.05 up to 0.95: 
+```{r echo=FALSE, include = TRUE}
+#Run the predictor model and find accuracy of model for a number of threshold value.  Put threshold and percent accurate values into dataframe for 
+#plotting
+predprob <- predict(final_model, test_trans_loans_df, type = "response") # get predicted probabilities
+
+
+
+threshold <- c(0, 0.05, 0.1, 0.15, 0.2, 0.25, 0.3, 0.35, 0.4, 0.45, 0.5, 0.55, 0.6, 0.65, 0.7, 0.75, 0.8, 0.85, 0.9, 0.95)  # Set Y=1 when predicted probability exceeds this
+percentpred = rep(0, length(threshold))
+
+thresh_list <- list()
+p_list <- list()
+
+for (i in 1:length(threshold)){
+  predLoan <- cut(predprob, breaks=c(-Inf, threshold[i], Inf), 
+                labels=c("Bad", "Good"))  # Y=1 is "Good" here
+  
+  cTab <- table(test_trans_loans_df$status, predLoan) 
+  addmargins(cTab)
+
+  p <- sum(diag(cTab)) / sum(cTab)  # compute the proportion of correct classifications
+  print(paste('Proportion correctly predicted at', threshold[i], 'threshold: ', p))
+  thresh_list[[i]] <- threshold[i]
+  p_list[[i]] <- p
+}
+
+thresh_per_values<- as.data.frame(matrix(nrow = length(threshold), ncol =2))
+colnames(thresh_per_values) <-c("Threshold_Value", "Accuracy_Percentage")
+thresh_per_values$Threshold_Value <- thresh_list
+thresh_per_values$Accuracy_Percentage <- p_list
+```
+
+```{r echo=FALSE, include = TRUE}
+#Scatterplot of model accuracy based on threshold value
+thresh = thresh_per_values$Threshold_Value
+acc = thresh_per_values$Accuracy_Percentage
+plot(thresh, acc,  main = "Accuracy of Threshold Values")
+```
+The model accuracy seems to be roughly equal until a threshold value of 0.6, after which it noticeably drops off. The most accurate threshold value is 0.5, with a 79.17% accuracy rate.  This is about 0.71% better than if every loan was treated as "Good."  The contingency table for the 0.5 threshold value is shown below.   
+```{r echo=FALSE, include = TRUE}
+#Contingency table at the threshold of maximum accuracy, when threshold = 0.5.
+threshold_best <- 0.5  # Set Y=1 when predicted probability exceeds this
+predLoan_best <- cut(predprob, breaks=c(-Inf, threshold_best, Inf), 
+                labels=c("Bad", "Good"))  
+cTab_best <- table(test_trans_loans_df$status, predLoan_best) 
+addmargins(cTab_best)
+
+p_best <- sum(diag(cTab_best)) / sum(cTab_best)  # compute the proportion of correct classifications
+print(paste('Proportion correctly predicted = ', p_best))
+```
+
+## Section 7: Optimizing the Threshold for Profit
+
+Next was determining the profit of the test dataframe when the model wasn't used; i.e. every loan was treated as "Good":
+```{r echo=FALSE, include = TRUE}
+ #Create a new dataframe from the test dataframe for manipulation and find the profit when the model is not used. 
+adj_test_trans_loans_df = test_trans_loans_df
+old_amount = (exp(test_trans_loans_df$amount^(1/5))) #Undo the "amount" transformation
+adj_test_trans_loans_df$amount <- old_amount #Set the amount column to the original amount
+
+adj_test_trans_loans_df$profit <- (adj_test_trans_loans_df$totalPaid - adj_test_trans_loans_df$amount) #Find the profit for each loan
+no_model_profit = round(sum(adj_test_trans_loans_df$profit), 2) #Finds total profit when the model is not used, i.e. every loan is accepted
+print(paste0("Profit without using the model: $", no_model_profit))
+
+```
+Finally, I calculated the profit when the model was used for different thresholds.  With the model, ideally loans would only be granted if they were accurately predicted to be "Good."  Here is a graph of the results:  
+```{r echo=FALSE, include = TRUE}
+#Create a new dataframe from the new test dataframe for finding the profit when the model is used. 
+profit_list <- list()
+for (i in 1:length(threshold)){ #Find the profit for each threshold value
+  model_test_trans_loans_df = adj_test_trans_loans_df #Creates the model profit dataframe, and resets it each time so a new Good/Bad column can be                                                        created for each new threshold value.
+  predLoan_profit <- cut(predprob, breaks=c(-Inf, threshold[i], Inf), 
+                labels=c("Bad", "Good")) 
+  model_test_trans_loans_df$predicted_status <- predLoan_profit #Make column with predicted "Good" and "Bad" values
+  model_test_trans_loans_df<-model_test_trans_loans_df[!(model_test_trans_loans_df$predicted_status=="Bad"),] #Remove loans predicted as "Bad"
+  model_profit = round(sum(model_test_trans_loans_df$profit), 2) #Finds total profit when model is used, i.e. only "Good" loans are accepted.
+  print(paste0("Profit using the model at ", threshold[i], " threshold: $", model_profit)) 
+  profit_list[[i]] <- model_profit                                                                                                
+}
+model_profit_df<- as.data.frame(matrix(nrow = length(threshold), ncol =2))
+colnames(model_profit_df) <-c("Threshold_Value", "Model_Profit")
+model_profit_df$Threshold_Value <- thresh_list
+model_profit_df$Model_Profit<- as.numeric(profit_list)
+model_profit_df$Perc_Prof_Inc <- (model_profit_df$Model_Profit - no_model_profit)/no_model_profit #Find the percent profit increase at each                                                                                                           threshold value
+print(paste0("The maximum profit of $", max(model_profit_df$Model_Profit), " occurs at a threshold value of ", model_profit_df$Threshold_Value[which.max(model_profit_df$Model_Profit)]))
+```
+
+```{r echo=FALSE, include = TRUE}
+#Scatterplot of model profit based on threshold value
+thresh = thresh_per_values$Threshold_Value
+profit = model_profit_df$Perc_Prof_Inc
+plot(thresh, profit,  main = "Percent Profit Increase by Threshold Values", xlab = "Threshoold Value", ylab = "% Profit Incr Compared to No Model")
+```
+
+## Section 8: Results Summary
+
+As stated, my model was limited to ten variables plus interaction terms, the most accurate being one interaction term.  The reasons for this were stated in Section 5.  A number of variables were removed from consideration for a number of reasons, which I also stated in previous sections 3, 4, and 5.  The chosen variables ended up being amount, term, payment, grade, debtIncRat, delinq2yr, inq6mth, totalAcc, accOpen24, and totalLim, with the interaction variable being term:totalLim, as this model gave the greatest accuracy despite not having the lowest AIC value.  
+
+Interestingly, the greatest profit came when the threshold was at 0.7, with a profit of $3,753,841.74.  This is a 117.18% increase from the profit found when the model was not used.  However, the most accurate model was when the threshold was 0.5, with an accuracy of 79.17% .  It is also worth noting that when the threshold was 0.5 the profit was $2,952,928.09, a 70.83% increase.  Also, when the threshold was 0.7, the accuracy was 74.61%.  Although management would mostly likely want to maximize profit, the option for them to go with accuracy is there.
+
+If I were to redo this, I wouldn't limit my model to just 10 variables; I'd use all that were deemed significant.  Additionally, I'd build the model to maximize profit instead of accuracy.  Currently, the profit is maximized based on threshold value and not included variables in the model.
